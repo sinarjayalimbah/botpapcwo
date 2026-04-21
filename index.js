@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { Pool } = require('pg');
+const crypto = require('crypto');
 
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
@@ -7,11 +8,14 @@ const bot = new TelegramBot(token, { polling: true });
 // ==========================
 // KONFIGURASI
 // ==========================
-const OWNER_ID = 8492860397;          // Ganti dengan ID owner
-const botUsername = "ratepapcowoksdct_bot";  // Ganti dengan username bot (tanpa @)
+const botUsername      = "ratepapcowoksdct_bot";           // username bot (tanpa @)
+const OWNER_ID         = 8492860397;                 // ID owner
+const CHANNEL_USERNAME = "@SeducteaseCH";      // channel wajib join
+const GROUP_ID         = -1001234567890;            // ID grup wajib join
+const GROUP_INVITE_LINK = "https://t.me/+WFBU_2WGIURmY2Nl";  // link invite grup
 
 // ==========================
-// DATABASE CONNECTION
+// DATABASE
 // ==========================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -19,40 +23,48 @@ const pool = new Pool({
 });
 
 // ==========================
+// STATE — pending upload admin
+// ==========================
+const pendingMedia = {}; // { adminId: { file_id, type } }
+
+// ==========================
+// GENERATE KODE UNIK
+// ==========================
+function generateCode() {
+  return crypto.randomBytes(24).toString('base64')
+    .replace(/\+/g, 'A')
+    .replace(/\//g, 'B')
+    .replace(/=/g, '');
+}
+
+// ==========================
 // CREATE TABLE
 // ==========================
 (async () => {
 
-  // Tabel admin
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS admins_review (
-      id BIGINT PRIMARY KEY
-    );
-  `);
-
-  // Insert owner sebagai admin pertama
-  await pool.query(
-    "INSERT INTO admins_review (id) VALUES ($1) ON CONFLICT DO NOTHING",
-    [OWNER_ID]
-  );
-
-  // Tabel untuk menyimpan kiriman user yang sudah disetujui
-  // (untuk tombol Terima — bot kirim link ke user)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS submissions (
+    CREATE TABLE IF NOT EXISTS media_pap (
       id SERIAL PRIMARY KEY,
-      user_id BIGINT NOT NULL,
-      user_name TEXT,
-      media_type TEXT NOT NULL,         -- 'photo' atau 'video'
+      kode TEXT UNIQUE,
       file_id TEXT NOT NULL,
-      caption TEXT,
-      admin_message_id BIGINT,          -- message_id di chat admin
-      status TEXT DEFAULT 'pending',    -- pending / accepted / rejected
+      media_type TEXT NOT NULL,
+      judul TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  console.log("✅ Database ready");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admins_pap (
+      id BIGINT PRIMARY KEY
+    );
+  `);
+
+  await pool.query(
+    "INSERT INTO admins_pap (id) VALUES ($1) ON CONFLICT DO NOTHING",
+    [OWNER_ID]
+  );
+
+  console.log('✅ Database ready');
 
 })();
 
@@ -61,62 +73,294 @@ const pool = new Pool({
 // ==========================
 async function isAdmin(userId) {
   const res = await pool.query(
-    "SELECT id FROM admins_review WHERE id=$1",
-    [userId]
+    "SELECT id FROM admins_pap WHERE id=$1", [userId]
   );
   return res.rows.length > 0;
 }
 
 // ==========================
-// HELPER: FORMAT INFO USER
+// HELPER: CEK JOIN CHANNEL & GRUP
 // ==========================
-function formatUserInfo(user, submissionId, caption) {
-  let text = `📨 *Review Masuk!*\n\n`;
-  text += `👤 Nama     : ${user.full_name || user.first_name}\n`;
-  text += `🆔 User ID  : \`${user.id}\`\n`;
-  text += `🔗 Username : @${user.username || '-'}\n`;
-  text += `📌 ID Review: \`${submissionId}\`\n`;
-  if (caption) text += `\n📝 *Caption:*\n${caption}`;
-  text += `\n\n_Pilih tindakan di bawah:_`;
-  return text;
+async function checkMembership(userId) {
+  try {
+    const channel = await bot.getChatMember(CHANNEL_USERNAME, userId);
+    const group   = await bot.getChatMember(GROUP_ID, userId);
+    const allowed = ['member', 'administrator', 'creator'];
+    if (!allowed.includes(channel.status)) return false;
+    if (!allowed.includes(group.status))   return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ==========================
-// /start
+// HELPER: KIRIM MEDIA KE USER
+// ==========================
+async function sendMedia(chatId, fileId, mediaType) {
+  if (mediaType === 'photo') {
+    await bot.sendPhoto(chatId, fileId, { protect_content: true });
+  } else if (mediaType === 'video') {
+    await bot.sendVideo(chatId, fileId, { protect_content: true });
+  }
+}
+
+// ==========================
+// /start — biasa (tanpa kode)
 // ==========================
 bot.onText(/\/start$/, async msg => {
   const admin = await isAdmin(msg.chat.id);
 
   if (admin) {
     return bot.sendMessage(msg.chat.id,
-      `📋 *Panel Admin — Bot Review*\n\n` +
-      `Semua foto/video dari pengguna akan masuk ke sini.\n\n` +
-      `📌 *Command:*\n` +
+      `📤 *Panel Admin — Bot Pap*\n\n` +
+      `Upload foto/video → ketik judul → link siap dibagikan.\n\n` +
+      `📋 *Command:*\n` +
+      `/listmedia — lihat semua media\n` +
+      `/hapus_(id) — hapus media\n` +
+      `/batal — batalkan upload\n` +
       `/listadmin — daftar admin\n` +
       `/addadmin (id) — tambah admin\n` +
       `/removeadmin (id) — hapus admin\n` +
-      `/listsubmission — lihat semua review masuk\n` +
       `/myid — lihat ID kamu`,
-      { parse_mode: "Markdown" }
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  const joined = await checkMembership(msg.chat.id);
+
+  if (joined) {
+    return bot.sendMessage(msg.chat.id,
+      `✅ Kamu sudah join!\nKlik link dari channel kami untuk melihat konten.`,
+      {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '📢 Ke Channel', url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }
+          ]]
+        }
+      }
     );
   }
 
   bot.sendMessage(msg.chat.id,
-    `👋 Halo! Selamat datang di *RATE PAP COWOK SEDUCTEASE*.\n\n` +
-    `Kirimkan *foto* atau *video* pap kamu.\n` +
-    `Boleh tambahkan caption sebagai keterangan. WAJIB MENAMBAHKAN STIKER YANG DISEDIAKAN, JIKA TERLIHAT WAJAH HARAP TUTUP DENGAN STIKER SEDUCTEASE\n\n` +
-    `📌 Pap kamu akan diproses oleh admin.`,
-    { parse_mode: "Markdown" }
+    `👋 Halo! Untuk melihat konten, join channel & grup kami dulu ya!`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📢 Join Channel', url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }],
+          [{ text: '👥 Join Grup',    url: GROUP_INVITE_LINK }]
+        ]
+      }
+    }
   );
+});
+
+// ==========================
+// /start — dengan kode (dari link channel)
+// ==========================
+bot.onText(/\/start (.+)/, async (msg, match) => {
+  const chatId = msg.chat.id;
+  const kode   = match[1];
+
+  const joined = await checkMembership(chatId);
+
+  if (!joined) {
+    return bot.sendMessage(chatId,
+      `🚫 Kamu harus join channel & grup kami dulu untuk melihat konten!`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '📢 Join Channel', url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }],
+            [{ text: '👥 Join Grup',    url: GROUP_INVITE_LINK }],
+            [{ text: '✅ Saya sudah join', callback_data: `ck_${kode}` }]
+          ]
+        }
+      }
+    );
+  }
+
+  const res = await pool.query(
+    "SELECT file_id, media_type FROM media_pap WHERE kode=$1", [kode]
+  );
+
+  if (res.rows.length === 0)
+    return bot.sendMessage(chatId, '❌ Konten tidak ditemukan.');
+
+  const { file_id, media_type } = res.rows[0];
+  await sendMedia(chatId, file_id, media_type);
+});
+
+// ==========================
+// CALLBACK: CEK ULANG JOIN
+// ==========================
+bot.on('callback_query', async query => {
+  const chatId = query.message.chat.id;
+  const data   = query.data;
+
+  if (!data.startsWith('ck_')) return;
+
+  const kode   = data.slice(3);
+  const joined = await checkMembership(chatId);
+
+  if (!joined) {
+    return bot.answerCallbackQuery(query.id, {
+      text: '❌ Kamu belum join channel/grup!',
+      show_alert: true
+    });
+  }
+
+  const res = await pool.query(
+    "SELECT file_id, media_type FROM media_pap WHERE kode=$1", [kode]
+  );
+
+  if (res.rows.length === 0) {
+    return bot.answerCallbackQuery(query.id, {
+      text: '❌ Konten tidak ditemukan.',
+      show_alert: true
+    });
+  }
+
+  const { file_id, media_type } = res.rows[0];
+  await sendMedia(chatId, file_id, media_type);
+  bot.answerCallbackQuery(query.id);
+});
+
+// ==========================
+// ADMIN UPLOAD FOTO
+// ==========================
+bot.on('message', async msg => {
+  if (!msg.photo) return;
+  const admin = await isAdmin(msg.chat.id);
+  if (!admin) return;
+
+  pendingMedia[msg.chat.id] = {
+    file_id:    msg.photo[msg.photo.length - 1].file_id,
+    media_type: 'photo'
+  };
+
+  bot.sendMessage(msg.chat.id,
+    `📝 Foto diterima! Sekarang ketik *judul* untuk foto ini:\n\n(ketik /batal untuk membatalkan)`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// ==========================
+// ADMIN UPLOAD VIDEO
+// ==========================
+bot.on('message', async msg => {
+  if (!msg.video) return;
+  const admin = await isAdmin(msg.chat.id);
+  if (!admin) return;
+
+  pendingMedia[msg.chat.id] = {
+    file_id:    msg.video.file_id,
+    media_type: 'video'
+  };
+
+  bot.sendMessage(msg.chat.id,
+    `📝 Video diterima! Sekarang ketik *judul* untuk video ini:\n\n(ketik /batal untuk membatalkan)`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// ==========================
+// TERIMA JUDUL DARI ADMIN
+// ==========================
+bot.on('message', async msg => {
+  if (!pendingMedia[msg.chat.id]) return;
+  if (!msg.text) return;
+  if (msg.text.startsWith('/')) return;
+
+  const admin = await isAdmin(msg.chat.id);
+  if (!admin) return;
+
+  const { file_id, media_type } = pendingMedia[msg.chat.id];
+  const judul = msg.text.trim();
+  const kode  = generateCode();
+
+  delete pendingMedia[msg.chat.id];
+
+  await pool.query(
+    "INSERT INTO media_pap (kode, file_id, media_type, judul) VALUES ($1, $2, $3, $4)",
+    [kode, file_id, media_type, judul]
+  );
+
+  const link = `https://t.me/${botUsername}?start=${kode}`;
+
+  bot.sendMessage(msg.chat.id,
+    `✅ *Media berhasil disimpan!*\n\n` +
+    `📌 Judul : ${judul}\n` +
+    `📎 Tipe  : ${media_type}\n` +
+    `🔗 Link  : \`${link}\``,
+    { parse_mode: 'Markdown' }
+  );
+});
+
+// ==========================
+// /batal
+// ==========================
+bot.onText(/\/batal/, async msg => {
+  const admin = await isAdmin(msg.chat.id);
+  if (!admin) return;
+
+  if (!pendingMedia[msg.chat.id])
+    return bot.sendMessage(msg.chat.id, '⚠️ Tidak ada upload yang aktif.');
+
+  delete pendingMedia[msg.chat.id];
+  bot.sendMessage(msg.chat.id, '✅ Upload dibatalkan.');
+});
+
+// ==========================
+// /listmedia
+// ==========================
+bot.onText(/\/listmedia/, async msg => {
+  const admin = await isAdmin(msg.chat.id);
+  if (!admin) return bot.sendMessage(msg.chat.id, '❌ Hanya admin.');
+
+  const res = await pool.query(
+    "SELECT id, judul, media_type, kode FROM media_pap ORDER BY created_at DESC"
+  );
+
+  if (res.rows.length === 0)
+    return bot.sendMessage(msg.chat.id, '📭 Belum ada media.');
+
+  let text = '📋 *Daftar Media*\n\n';
+  res.rows.forEach((r, i) => {
+    const icon = r.media_type === 'photo' ? '🖼' : '🎥';
+    text += `${i + 1}. ${icon} ${r.judul} (ID: ${r.id})\n`;
+    text += `🔗 \`https://t.me/${botUsername}?start=${r.kode}\`\n\n`;
+  });
+
+  bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+});
+
+// ==========================
+// /hapus_(id)
+// ==========================
+bot.onText(/\/hapus_(\d+)/, async (msg, match) => {
+  const admin = await isAdmin(msg.chat.id);
+  if (!admin) return bot.sendMessage(msg.chat.id, '❌ Hanya admin.');
+
+  const id  = parseInt(match[1]);
+  const res = await pool.query(
+    "SELECT judul FROM media_pap WHERE id=$1", [id]
+  );
+
+  if (res.rows.length === 0)
+    return bot.sendMessage(msg.chat.id, '❌ Media tidak ditemukan.');
+
+  await pool.query("DELETE FROM media_pap WHERE id=$1", [id]);
+  bot.sendMessage(msg.chat.id, `✅ Media "${res.rows[0].judul}" berhasil dihapus.`);
 });
 
 // ==========================
 // /myid
 // ==========================
 bot.onText(/\/myid/, msg => {
-  bot.sendMessage(msg.chat.id, `🆔 ID kamu: \`${msg.chat.id}\``, {
-    parse_mode: "Markdown"
-  });
+  bot.sendMessage(msg.chat.id,
+    `🆔 ID kamu: \`${msg.chat.id}\``,
+    { parse_mode: 'Markdown' }
+  );
 });
 
 // ==========================
@@ -124,16 +368,13 @@ bot.onText(/\/myid/, msg => {
 // ==========================
 bot.onText(/\/addadmin (\d+)/, async (msg, match) => {
   if (msg.chat.id !== OWNER_ID)
-    return bot.sendMessage(msg.chat.id, "❌ Hanya owner.");
+    return bot.sendMessage(msg.chat.id, '❌ Hanya owner.');
 
-  const id = parseInt(match[1]);
   await pool.query(
-    "INSERT INTO admins_review (id) VALUES ($1) ON CONFLICT DO NOTHING",
-    [id]
+    "INSERT INTO admins_pap (id) VALUES ($1) ON CONFLICT DO NOTHING",
+    [parseInt(match[1])]
   );
-  bot.sendMessage(msg.chat.id, `✅ Admin \`${id}\` ditambahkan.`, {
-    parse_mode: "Markdown"
-  });
+  bot.sendMessage(msg.chat.id, `✅ Admin \`${match[1]}\` ditambahkan.`, { parse_mode: 'Markdown' });
 });
 
 // ==========================
@@ -141,16 +382,14 @@ bot.onText(/\/addadmin (\d+)/, async (msg, match) => {
 // ==========================
 bot.onText(/\/removeadmin (\d+)/, async (msg, match) => {
   if (msg.chat.id !== OWNER_ID)
-    return bot.sendMessage(msg.chat.id, "❌ Hanya owner.");
+    return bot.sendMessage(msg.chat.id, '❌ Hanya owner.');
 
   const id = parseInt(match[1]);
   if (id === OWNER_ID)
-    return bot.sendMessage(msg.chat.id, "❌ Owner tidak bisa dihapus.");
+    return bot.sendMessage(msg.chat.id, '❌ Owner tidak bisa dihapus.');
 
-  await pool.query("DELETE FROM admins_review WHERE id=$1", [id]);
-  bot.sendMessage(msg.chat.id, `✅ Admin \`${id}\` dihapus.`, {
-    parse_mode: "Markdown"
-  });
+  await pool.query("DELETE FROM admins_pap WHERE id=$1", [id]);
+  bot.sendMessage(msg.chat.id, `✅ Admin \`${id}\` dihapus.`, { parse_mode: 'Markdown' });
 });
 
 // ==========================
@@ -158,269 +397,12 @@ bot.onText(/\/removeadmin (\d+)/, async (msg, match) => {
 // ==========================
 bot.onText(/\/listadmin/, async msg => {
   if (msg.chat.id !== OWNER_ID)
-    return bot.sendMessage(msg.chat.id, "❌ Hanya owner.");
+    return bot.sendMessage(msg.chat.id, '❌ Hanya owner.');
 
-  const res = await pool.query("SELECT id FROM admins_review");
-  let text = "📋 *Daftar Admin*\n\n";
+  const res = await pool.query("SELECT id FROM admins_pap");
+  let text = '📋 *Daftar Admin*\n\n';
   res.rows.forEach((r, i) => {
     text += `${i + 1}. \`${r.id}\`${r.id == OWNER_ID ? ' (OWNER)' : ''}\n`;
   });
-  bot.sendMessage(msg.chat.id, text, { parse_mode: "Markdown" });
-});
-
-// ==========================
-// /listsubmission
-// ==========================
-bot.onText(/\/listsubmission/, async msg => {
-  const admin = await isAdmin(msg.chat.id);
-  if (!admin) return bot.sendMessage(msg.chat.id, "❌ Hanya admin.");
-
-  const res = await pool.query(
-    "SELECT id, user_name, media_type, status, created_at FROM submissions ORDER BY created_at DESC LIMIT 20"
-  );
-
-  if (res.rows.length === 0)
-    return bot.sendMessage(msg.chat.id, "📭 Belum ada submission.");
-
-  let text = "📋 *Daftar Review (20 terbaru)*\n\n";
-  res.rows.forEach((r, i) => {
-    const icon = r.status === 'accepted' ? '✅' : r.status === 'rejected' ? '❌' : '⏳';
-    text += `${i + 1}. ${icon} ID \`${r.id}\` — @${r.user_name || '-'} — ${r.media_type}\n`;
-  });
-
-  bot.sendMessage(msg.chat.id, text, { parse_mode: "Markdown" });
-});
-
-// ==========================
-// TERIMA FOTO DARI USER
-// ==========================
-bot.on("message", async msg => {
-  if (!msg.photo) return;
-  const admin = await isAdmin(msg.chat.id);
-  if (admin) return; // admin tidak perlu diproses
-
-  const user = msg.from;
-  const caption = msg.caption || null;
-  const fileId = msg.photo[msg.photo.length - 1].file_id; // resolusi tertinggi
-
-  try {
-    // Simpan ke database dulu (tanpa admin_message_id)
-    const ins = await pool.query(
-      `INSERT INTO submissions (user_id, user_name, media_type, file_id, caption)
-       VALUES ($1, $2, 'photo', $3, $4) RETURNING id`,
-      [user.id, user.username || null, fileId, caption]
-    );
-    const submissionId = ins.rows[0].id;
-
-    // Kirim ke semua admin
-    const admins = await pool.query("SELECT id FROM admins_review");
-    const infoText = formatUserInfo(user, submissionId, caption);
-
-    for (const a of admins.rows) {
-      const sent = await bot.sendPhoto(a.id, fileId, {
-        caption: infoText,
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "✅ Terima", callback_data: `accept_${submissionId}` },
-              { text: "❌ Tolak",  callback_data: `reject_${submissionId}` }
-            ]
-          ]
-        }
-      });
-
-      // Simpan message_id pesan admin pertama (owner) untuk nanti di-edit
-      if (a.id == OWNER_ID) {
-        await pool.query(
-          "UPDATE submissions SET admin_message_id=$1 WHERE id=$2",
-          [sent.message_id, submissionId]
-        );
-      }
-    }
-
-    await bot.sendMessage(msg.chat.id,
-      "✅ Foto review kamu sudah terkirim!\nTunggu konfirmasi dari admin ya. 🙏"
-    );
-
-  } catch (err) {
-    console.error("Error handle photo:", err);
-    bot.sendMessage(msg.chat.id, "❌ Gagal mengirim. Coba lagi nanti.");
-  }
-});
-
-// ==========================
-// TERIMA VIDEO DARI USER
-// ==========================
-bot.on("message", async msg => {
-  if (!msg.video) return;
-  const admin = await isAdmin(msg.chat.id);
-  if (admin) return;
-
-  const user = msg.from;
-  const caption = msg.caption || null;
-  const fileId = msg.video.file_id;
-
-  try {
-    const ins = await pool.query(
-      `INSERT INTO submissions (user_id, user_name, media_type, file_id, caption)
-       VALUES ($1, $2, 'video', $3, $4) RETURNING id`,
-      [user.id, user.username || null, fileId, caption]
-    );
-    const submissionId = ins.rows[0].id;
-
-    const admins = await pool.query("SELECT id FROM admins_review");
-    const infoText = formatUserInfo(user, submissionId, caption);
-
-    for (const a of admins.rows) {
-      const sent = await bot.sendVideo(a.id, fileId, {
-        caption: infoText,
-        parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "✅ Terima", callback_data: `accept_${submissionId}` },
-              { text: "❌ Tolak",  callback_data: `reject_${submissionId}` }
-            ]
-          ]
-        }
-      });
-
-      if (a.id == OWNER_ID) {
-        await pool.query(
-          "UPDATE submissions SET admin_message_id=$1 WHERE id=$2",
-          [sent.message_id, submissionId]
-        );
-      }
-    }
-
-    await bot.sendMessage(msg.chat.id,
-      "✅ Video review kamu sudah terkirim!\nTunggu konfirmasi dari admin ya. 🙏"
-    );
-
-  } catch (err) {
-    console.error("Error handle video:", err);
-    bot.sendMessage(msg.chat.id, "❌ Gagal mengirim. Coba lagi nanti.");
-  }
-});
-
-// ==========================
-// CALLBACK: TERIMA / TOLAK
-// ==========================
-bot.on("callback_query", async query => {
-  const adminId = query.message.chat.id;
-  const data = query.data;
-  const messageId = query.message.message_id;
-
-  const admin = await isAdmin(adminId);
-  if (!admin) return bot.answerCallbackQuery(query.id, { text: "❌ Bukan admin." });
-
-  // ── TERIMA ──────────────────────────────────
-  if (data.startsWith("accept_")) {
-    const submissionId = parseInt(data.replace("accept_", ""));
-
-    const res = await pool.query(
-      "SELECT * FROM submissions WHERE id=$1",
-      [submissionId]
-    );
-
-    if (res.rows.length === 0)
-      return bot.answerCallbackQuery(query.id, { text: "❌ Submission tidak ditemukan." });
-
-    const sub = res.rows[0];
-
-    if (sub.status !== 'pending')
-      return bot.answerCallbackQuery(query.id, {
-        text: `⚠️ Sudah diproses (${sub.status})`,
-        show_alert: true
-      });
-
-    // Update status
-    await pool.query(
-      "UPDATE submissions SET status='accepted' WHERE id=$1",
-      [submissionId]
-    );
-
-    // Buat link deep link ke bot video (ganti botUsername dengan bot video kamu)
-    // Contoh: link ke konten di bot video
-    const link = `https://t.me/${botUsername}?start=review_${submissionId}`;
-
-    // Kirim notifikasi ke user
-    try {
-      await bot.sendMessage(sub.user_id,
-        `🎉 *Review kamu diterima!*\n\n` +
-        `Terima kasih sudah mengirimkan review.\n\n` +
-        `🔗 Klik link berikut:\n${link}`,
-        { parse_mode: "Markdown" }
-      );
-    } catch (e) {
-      console.error("Gagal kirim notif ke user:", e.message);
-    }
-
-    // Edit pesan di admin — hapus tombol & update status
-    try {
-      await bot.editMessageCaption(
-        query.message.caption + `\n\n✅ *Diterima oleh admin \`${adminId}\`*`,
-        {
-          chat_id: adminId,
-          message_id: messageId,
-          parse_mode: "Markdown",
-          reply_markup: { inline_keyboard: [] } // hapus tombol
-        }
-      );
-    } catch (_) {}
-
-    bot.answerCallbackQuery(query.id, { text: "✅ Review diterima & user sudah dinotifikasi." });
-
-  // ── TOLAK ───────────────────────────────────
-  } else if (data.startsWith("reject_")) {
-    const submissionId = parseInt(data.replace("reject_", ""));
-
-    const res = await pool.query(
-      "SELECT * FROM submissions WHERE id=$1",
-      [submissionId]
-    );
-
-    if (res.rows.length === 0)
-      return bot.answerCallbackQuery(query.id, { text: "❌ Submission tidak ditemukan." });
-
-    const sub = res.rows[0];
-
-    if (sub.status !== 'pending')
-      return bot.answerCallbackQuery(query.id, {
-        text: `⚠️ Sudah diproses (${sub.status})`,
-        show_alert: true
-      });
-
-    await pool.query(
-      "UPDATE submissions SET status='rejected' WHERE id=$1",
-      [submissionId]
-    );
-
-    // Kirim notifikasi ke user
-    try {
-      await bot.sendMessage(sub.user_id,
-        `😔 *Review kamu tidak dapat diterima.*\n\n` +
-        `Silakan coba kirimkan review lain yang sesuai.`,
-        { parse_mode: "Markdown" }
-      );
-    } catch (e) {
-      console.error("Gagal kirim notif ke user:", e.message);
-    }
-
-    // Edit pesan di admin
-    try {
-      await bot.editMessageCaption(
-        query.message.caption + `\n\n❌ *Ditolak oleh admin \`${adminId}\`*`,
-        {
-          chat_id: adminId,
-          message_id: messageId,
-          parse_mode: "Markdown",
-          reply_markup: { inline_keyboard: [] }
-        }
-      );
-    } catch (_) {}
-
-    bot.answerCallbackQuery(query.id, { text: "❌ Review ditolak & user sudah dinotifikasi." });
-  }
+  bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
 });
