@@ -8,11 +8,11 @@ const bot = new TelegramBot(token, { polling: true });
 // ==========================
 // KONFIGURASI
 // ==========================
-const botUsername       = "ratepapcowoksdct_bot";          // username bot (tanpa @)
-const OWNER_ID          = 8492860397;                // ID owner
-const CHANNEL_USERNAME  = "@SeducteaseCH";     // channel wajib join
-const GROUP_ID          = -1003521400775;           // ID grup wajib join
-const GROUP_INVITE_LINK = "https://t.me/+WFBU_2WGIURmY2Nl";  // link invite grup
+const botUsername       = "ratepapcowoksdct_bot";
+const OWNER_ID          = 8492860397;
+const CHANNEL_USERNAME  = "@SeducteaseCH";
+const GROUP_ID          = -1003521400775;
+const GROUP_INVITE_LINK = "https://t.me/+WFBU_2WGIURmY2Nl";
 
 // ==========================
 // DATABASE
@@ -22,14 +22,8 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ==========================
-// STATE — pending upload admin
-// ==========================
 const pendingMedia = {};
 
-// ==========================
-// GENERATE KODE UNIK
-// ==========================
 function generateCode() {
   return crypto.randomBytes(24).toString('base64')
     .replace(/\+/g, 'A')
@@ -43,7 +37,7 @@ function generateCode() {
 (async () => {
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS media_pap (
+    CREATE TABLE IF NOT EXISTS media_papcowok (
       id SERIAL PRIMARY KEY,
       kode TEXT UNIQUE,
       file_id TEXT NOT NULL,
@@ -54,33 +48,25 @@ function generateCode() {
   `);
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS admins_pap (
+    CREATE TABLE IF NOT EXISTS admins_papcowok (
       id BIGINT PRIMARY KEY
     );
   `);
 
   await pool.query(
-    "INSERT INTO admins_pap (id) VALUES ($1) ON CONFLICT DO NOTHING",
+    "INSERT INTO admins_papcowok (id) VALUES ($1) ON CONFLICT DO NOTHING",
     [OWNER_ID]
   );
 
-  console.log('Database ready');
+  console.log('Database ready - Bot Pap Cowok');
 
 })();
 
-// ==========================
-// HELPER: CEK ADMIN
-// ==========================
 async function isAdmin(userId) {
-  const res = await pool.query(
-    "SELECT id FROM admins_pap WHERE id=$1", [userId]
-  );
+  const res = await pool.query("SELECT id FROM admins_papcowok WHERE id=$1", [userId]);
   return res.rows.length > 0;
 }
 
-// ==========================
-// HELPER: CEK JOIN CHANNEL & GRUP
-// ==========================
 async function checkMembership(userId) {
   try {
     const channel = await bot.getChatMember(CHANNEL_USERNAME, userId);
@@ -94,9 +80,6 @@ async function checkMembership(userId) {
   }
 }
 
-// ==========================
-// HELPER: KIRIM MEDIA KE USER
-// ==========================
 async function sendMedia(chatId, fileId, mediaType) {
   if (mediaType === 'photo') {
     await bot.sendPhoto(chatId, fileId, { protect_content: true });
@@ -106,14 +89,14 @@ async function sendMedia(chatId, fileId, mediaType) {
 }
 
 // ==========================
-// /start biasa (tanpa kode)
+// /start biasa
 // ==========================
 bot.onText(/\/start$/, async msg => {
   const admin = await isAdmin(msg.chat.id);
 
   if (admin) {
     return bot.sendMessage(msg.chat.id,
-      "Panel Admin - Bot Pap\n\n" +
+      "Panel Admin - Bot Pap Cowok\n\n" +
       "Upload foto/video lalu ketik judul, link langsung muncul.\n\n" +
       "Command:\n" +
       "/listmedia - lihat semua media\n" +
@@ -155,7 +138,7 @@ bot.onText(/\/start$/, async msg => {
 });
 
 // ==========================
-// /start dengan kode (dari link channel)
+// /start dengan kode
 // ==========================
 bot.onText(/\/start (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -179,7 +162,7 @@ bot.onText(/\/start (.+)/, async (msg, match) => {
   }
 
   const res = await pool.query(
-    "SELECT file_id, media_type FROM media_pap WHERE kode=$1", [kode]
+    "SELECT file_id, media_type FROM media_papcowok WHERE kode=$1", [kode]
   );
 
   if (res.rows.length === 0)
@@ -209,7 +192,7 @@ bot.on('callback_query', async query => {
   }
 
   const res = await pool.query(
-    "SELECT file_id, media_type FROM media_pap WHERE kode=$1", [kode]
+    "SELECT file_id, media_type FROM media_papcowok WHERE kode=$1", [kode]
   );
 
   if (res.rows.length === 0) {
@@ -278,7 +261,7 @@ bot.on('message', async msg => {
   delete pendingMedia[msg.chat.id];
 
   await pool.query(
-    "INSERT INTO media_pap (kode, file_id, media_type, judul) VALUES ($1, $2, $3, $4)",
+    "INSERT INTO media_papcowok (kode, file_id, media_type, judul) VALUES ($1, $2, $3, $4)",
     [kode, file_id, media_type, judul]
   );
 
@@ -314,13 +297,13 @@ bot.onText(/\/listmedia/, async msg => {
   if (!admin) return bot.sendMessage(msg.chat.id, "Hanya admin.");
 
   const res = await pool.query(
-    "SELECT id, judul, media_type, kode FROM media_pap ORDER BY created_at DESC"
+    "SELECT id, judul, media_type, kode FROM media_papcowok ORDER BY created_at DESC"
   );
 
   if (res.rows.length === 0)
     return bot.sendMessage(msg.chat.id, "Belum ada media.");
 
-  let text = "Daftar Media\n\n";
+  let text = "Daftar Media - Pap Cowok\n\n";
   res.rows.forEach((r, i) => {
     const icon = r.media_type === 'photo' ? '🖼' : '🎥';
     text += `${i + 1}. ${icon} ${r.judul} (ID: ${r.id})\n`;
@@ -338,14 +321,12 @@ bot.onText(/\/hapus_(\d+)/, async (msg, match) => {
   if (!admin) return bot.sendMessage(msg.chat.id, "Hanya admin.");
 
   const id  = parseInt(match[1]);
-  const res = await pool.query(
-    "SELECT judul FROM media_pap WHERE id=$1", [id]
-  );
+  const res = await pool.query("SELECT judul FROM media_papcowok WHERE id=$1", [id]);
 
   if (res.rows.length === 0)
     return bot.sendMessage(msg.chat.id, "Media tidak ditemukan.");
 
-  await pool.query("DELETE FROM media_pap WHERE id=$1", [id]);
+  await pool.query("DELETE FROM media_papcowok WHERE id=$1", [id]);
   bot.sendMessage(msg.chat.id, "Media " + res.rows[0].judul + " berhasil dihapus.");
 });
 
@@ -364,7 +345,7 @@ bot.onText(/\/addadmin (\d+)/, async (msg, match) => {
     return bot.sendMessage(msg.chat.id, "Hanya owner.");
 
   await pool.query(
-    "INSERT INTO admins_pap (id) VALUES ($1) ON CONFLICT DO NOTHING",
+    "INSERT INTO admins_papcowok (id) VALUES ($1) ON CONFLICT DO NOTHING",
     [parseInt(match[1])]
   );
   bot.sendMessage(msg.chat.id, "Admin " + match[1] + " ditambahkan.");
@@ -381,7 +362,7 @@ bot.onText(/\/removeadmin (\d+)/, async (msg, match) => {
   if (id === OWNER_ID)
     return bot.sendMessage(msg.chat.id, "Owner tidak bisa dihapus.");
 
-  await pool.query("DELETE FROM admins_pap WHERE id=$1", [id]);
+  await pool.query("DELETE FROM admins_papcowok WHERE id=$1", [id]);
   bot.sendMessage(msg.chat.id, "Admin " + id + " dihapus.");
 });
 
@@ -392,8 +373,8 @@ bot.onText(/\/listadmin/, async msg => {
   if (msg.chat.id !== OWNER_ID)
     return bot.sendMessage(msg.chat.id, "Hanya owner.");
 
-  const res = await pool.query("SELECT id FROM admins_pap");
-  let text = "Daftar Admin\n\n";
+  const res = await pool.query("SELECT id FROM admins_papcowok");
+  let text = "Daftar Admin - Pap Cowok\n\n";
   res.rows.forEach((r, i) => {
     text += `${i + 1}. ${r.id}${r.id == OWNER_ID ? ' (OWNER)' : ''}\n`;
   });
