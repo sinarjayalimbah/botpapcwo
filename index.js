@@ -8,7 +8,7 @@ const bot = new TelegramBot(token, { polling: true });
 // ==========================
 // KONFIGURASI
 // ==========================
-const botUsername       = "ratepapcowoksdct_bot";
+const botUsername       = "ratepapceweksdct_bot";
 const OWNER_ID          = 8492860397;
 const CHANNEL_USERNAME  = "@SeducteaseCH";
 const GROUP_ID          = -1003521400775;
