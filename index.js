@@ -14,8 +14,7 @@ const OWNER_ID = 8492860397;
 // 🔥 MULTI CHANNEL
 const CHANNELS = [
   "@SeducteaseCH",
-  "@Channel2",
-  "@Channel3"
+  "@Ratepapcewek_SDCT"
 ];
 
 // 🔥 1 GRUP
