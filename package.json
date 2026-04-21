@@ -1,9 +1,9 @@
 {
-  "name": "bot-review",
+  "name": "bot-papcowok",
   "version": "1.0.0",
-  "main": "bot_review.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot_review.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "node-telegram-bot-api": "^0.66.0",
