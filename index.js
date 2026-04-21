@@ -8,10 +8,10 @@ const bot = new TelegramBot(token, { polling: true });
 // ==========================
 // KONFIGURASI
 // ==========================
-const botUsername      = "ratepapcowoksdct_bot";           // username bot (tanpa @)
-const OWNER_ID         = 8492860397;                 // ID owner
-const CHANNEL_USERNAME = "@SeducteaseCH";      // channel wajib join
-const GROUP_ID         = -1001234567890;            // ID grup wajib join
+const botUsername       = "ratepapcowoksdct_bot";          // username bot (tanpa @)
+const OWNER_ID          = 8492860397;                // ID owner
+const CHANNEL_USERNAME  = "@SeducteaseCH";     // channel wajib join
+const GROUP_ID          = -1003521400775;           // ID grup wajib join
 const GROUP_INVITE_LINK = "https://t.me/+WFBU_2WGIURmY2Nl";  // link invite grup
 
 // ==========================
@@ -25,7 +25,7 @@ const pool = new Pool({
 // ==========================
 // STATE — pending upload admin
 // ==========================
-const pendingMedia = {}; // { adminId: { file_id, type } }
+const pendingMedia = {};
 
 // ==========================
 // GENERATE KODE UNIK
@@ -64,7 +64,7 @@ function generateCode() {
     [OWNER_ID]
   );
 
-  console.log('✅ Database ready');
+  console.log('Database ready');
 
 })();
 
@@ -106,24 +106,23 @@ async function sendMedia(chatId, fileId, mediaType) {
 }
 
 // ==========================
-// /start — biasa (tanpa kode)
+// /start biasa (tanpa kode)
 // ==========================
 bot.onText(/\/start$/, async msg => {
   const admin = await isAdmin(msg.chat.id);
 
   if (admin) {
     return bot.sendMessage(msg.chat.id,
-      `📤 *Panel Admin — Bot Pap*\n\n` +
-      `Upload foto/video → ketik judul → link siap dibagikan.\n\n` +
-      `📋 *Command:*\n` +
-      `/listmedia — lihat semua media\n` +
-      `/hapus_(id) — hapus media\n` +
-      `/batal — batalkan upload\n` +
-      `/listadmin — daftar admin\n` +
-      `/addadmin (id) — tambah admin\n` +
-      `/removeadmin (id) — hapus admin\n` +
-      `/myid — lihat ID kamu`,
-      { parse_mode: 'Markdown' }
+      "Panel Admin - Bot Pap\n\n" +
+      "Upload foto/video lalu ketik judul, link langsung muncul.\n\n" +
+      "Command:\n" +
+      "/listmedia - lihat semua media\n" +
+      "/hapus_(id) - hapus media, contoh: /hapus_1\n" +
+      "/batal - batalkan upload\n" +
+      "/listadmin - daftar admin\n" +
+      "/addadmin (id) - tambah admin\n" +
+      "/removeadmin (id) - hapus admin\n" +
+      "/myid - lihat ID kamu"
     );
   }
 
@@ -131,11 +130,11 @@ bot.onText(/\/start$/, async msg => {
 
   if (joined) {
     return bot.sendMessage(msg.chat.id,
-      `✅ Kamu sudah join!\nKlik link dari channel kami untuk melihat konten.`,
+      "Kamu sudah join! Klik link dari channel kami untuk melihat konten.",
       {
         reply_markup: {
           inline_keyboard: [[
-            { text: '📢 Ke Channel', url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }
+            { text: "Ke Channel", url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }
           ]]
         }
       }
@@ -143,12 +142,12 @@ bot.onText(/\/start$/, async msg => {
   }
 
   bot.sendMessage(msg.chat.id,
-    `👋 Halo! Untuk melihat konten, join channel & grup kami dulu ya!`,
+    "Halo! Untuk melihat konten, join channel & grup kami dulu ya!",
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: '📢 Join Channel', url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }],
-          [{ text: '👥 Join Grup',    url: GROUP_INVITE_LINK }]
+          [{ text: "Join Channel", url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }],
+          [{ text: "Join Grup",    url: GROUP_INVITE_LINK }]
         ]
       }
     }
@@ -156,7 +155,7 @@ bot.onText(/\/start$/, async msg => {
 });
 
 // ==========================
-// /start — dengan kode (dari link channel)
+// /start dengan kode (dari link channel)
 // ==========================
 bot.onText(/\/start (.+)/, async (msg, match) => {
   const chatId = msg.chat.id;
@@ -166,13 +165,13 @@ bot.onText(/\/start (.+)/, async (msg, match) => {
 
   if (!joined) {
     return bot.sendMessage(chatId,
-      `🚫 Kamu harus join channel & grup kami dulu untuk melihat konten!`,
+      "Kamu harus join channel & grup kami dulu untuk melihat konten!",
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: '📢 Join Channel', url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }],
-            [{ text: '👥 Join Grup',    url: GROUP_INVITE_LINK }],
-            [{ text: '✅ Saya sudah join', callback_data: `ck_${kode}` }]
+            [{ text: "Join Channel", url: `https://t.me/${CHANNEL_USERNAME.replace('@', '')}` }],
+            [{ text: "Join Grup",    url: GROUP_INVITE_LINK }],
+            [{ text: "Saya sudah join", callback_data: `ck_${kode}` }]
           ]
         }
       }
@@ -184,7 +183,7 @@ bot.onText(/\/start (.+)/, async (msg, match) => {
   );
 
   if (res.rows.length === 0)
-    return bot.sendMessage(chatId, '❌ Konten tidak ditemukan.');
+    return bot.sendMessage(chatId, "Konten tidak ditemukan.");
 
   const { file_id, media_type } = res.rows[0];
   await sendMedia(chatId, file_id, media_type);
@@ -204,7 +203,7 @@ bot.on('callback_query', async query => {
 
   if (!joined) {
     return bot.answerCallbackQuery(query.id, {
-      text: '❌ Kamu belum join channel/grup!',
+      text: "Kamu belum join channel/grup!",
       show_alert: true
     });
   }
@@ -215,7 +214,7 @@ bot.on('callback_query', async query => {
 
   if (res.rows.length === 0) {
     return bot.answerCallbackQuery(query.id, {
-      text: '❌ Konten tidak ditemukan.',
+      text: "Konten tidak ditemukan.",
       show_alert: true
     });
   }
@@ -239,8 +238,7 @@ bot.on('message', async msg => {
   };
 
   bot.sendMessage(msg.chat.id,
-    `📝 Foto diterima! Sekarang ketik *judul* untuk foto ini:\n\n(ketik /batal untuk membatalkan)`,
-    { parse_mode: 'Markdown' }
+    "Foto diterima! Sekarang ketik judul untuk foto ini:\n\n(ketik /batal untuk membatalkan)"
   );
 });
 
@@ -258,8 +256,7 @@ bot.on('message', async msg => {
   };
 
   bot.sendMessage(msg.chat.id,
-    `📝 Video diterima! Sekarang ketik *judul* untuk video ini:\n\n(ketik /batal untuk membatalkan)`,
-    { parse_mode: 'Markdown' }
+    "Video diterima! Sekarang ketik judul untuk video ini:\n\n(ketik /batal untuk membatalkan)"
   );
 });
 
@@ -288,11 +285,10 @@ bot.on('message', async msg => {
   const link = `https://t.me/${botUsername}?start=${kode}`;
 
   bot.sendMessage(msg.chat.id,
-    `✅ *Media berhasil disimpan!*\n\n` +
-    `📌 Judul : ${judul}\n` +
-    `📎 Tipe  : ${media_type}\n` +
-    `🔗 Link  : \`${link}\``,
-    { parse_mode: 'Markdown' }
+    "Media berhasil disimpan!\n\n" +
+    "Judul : " + judul + "\n" +
+    "Tipe  : " + media_type + "\n" +
+    "Link  : " + link
   );
 });
 
@@ -304,10 +300,10 @@ bot.onText(/\/batal/, async msg => {
   if (!admin) return;
 
   if (!pendingMedia[msg.chat.id])
-    return bot.sendMessage(msg.chat.id, '⚠️ Tidak ada upload yang aktif.');
+    return bot.sendMessage(msg.chat.id, "Tidak ada upload yang aktif.");
 
   delete pendingMedia[msg.chat.id];
-  bot.sendMessage(msg.chat.id, '✅ Upload dibatalkan.');
+  bot.sendMessage(msg.chat.id, "Upload dibatalkan.");
 });
 
 // ==========================
@@ -315,23 +311,23 @@ bot.onText(/\/batal/, async msg => {
 // ==========================
 bot.onText(/\/listmedia/, async msg => {
   const admin = await isAdmin(msg.chat.id);
-  if (!admin) return bot.sendMessage(msg.chat.id, '❌ Hanya admin.');
+  if (!admin) return bot.sendMessage(msg.chat.id, "Hanya admin.");
 
   const res = await pool.query(
     "SELECT id, judul, media_type, kode FROM media_pap ORDER BY created_at DESC"
   );
 
   if (res.rows.length === 0)
-    return bot.sendMessage(msg.chat.id, '📭 Belum ada media.');
+    return bot.sendMessage(msg.chat.id, "Belum ada media.");
 
-  let text = '📋 *Daftar Media*\n\n';
+  let text = "Daftar Media\n\n";
   res.rows.forEach((r, i) => {
     const icon = r.media_type === 'photo' ? '🖼' : '🎥';
     text += `${i + 1}. ${icon} ${r.judul} (ID: ${r.id})\n`;
-    text += `🔗 \`https://t.me/${botUsername}?start=${r.kode}\`\n\n`;
+    text += `https://t.me/${botUsername}?start=${r.kode}\n\n`;
   });
 
-  bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+  bot.sendMessage(msg.chat.id, text);
 });
 
 // ==========================
@@ -339,7 +335,7 @@ bot.onText(/\/listmedia/, async msg => {
 // ==========================
 bot.onText(/\/hapus_(\d+)/, async (msg, match) => {
   const admin = await isAdmin(msg.chat.id);
-  if (!admin) return bot.sendMessage(msg.chat.id, '❌ Hanya admin.');
+  if (!admin) return bot.sendMessage(msg.chat.id, "Hanya admin.");
 
   const id  = parseInt(match[1]);
   const res = await pool.query(
@@ -347,20 +343,17 @@ bot.onText(/\/hapus_(\d+)/, async (msg, match) => {
   );
 
   if (res.rows.length === 0)
-    return bot.sendMessage(msg.chat.id, '❌ Media tidak ditemukan.');
+    return bot.sendMessage(msg.chat.id, "Media tidak ditemukan.");
 
   await pool.query("DELETE FROM media_pap WHERE id=$1", [id]);
-  bot.sendMessage(msg.chat.id, `✅ Media "${res.rows[0].judul}" berhasil dihapus.`);
+  bot.sendMessage(msg.chat.id, "Media " + res.rows[0].judul + " berhasil dihapus.");
 });
 
 // ==========================
 // /myid
 // ==========================
 bot.onText(/\/myid/, msg => {
-  bot.sendMessage(msg.chat.id,
-    `🆔 ID kamu: \`${msg.chat.id}\``,
-    { parse_mode: 'Markdown' }
-  );
+  bot.sendMessage(msg.chat.id, "ID kamu: " + msg.chat.id);
 });
 
 // ==========================
@@ -368,13 +361,13 @@ bot.onText(/\/myid/, msg => {
 // ==========================
 bot.onText(/\/addadmin (\d+)/, async (msg, match) => {
   if (msg.chat.id !== OWNER_ID)
-    return bot.sendMessage(msg.chat.id, '❌ Hanya owner.');
+    return bot.sendMessage(msg.chat.id, "Hanya owner.");
 
   await pool.query(
     "INSERT INTO admins_pap (id) VALUES ($1) ON CONFLICT DO NOTHING",
     [parseInt(match[1])]
   );
-  bot.sendMessage(msg.chat.id, `✅ Admin \`${match[1]}\` ditambahkan.`, { parse_mode: 'Markdown' });
+  bot.sendMessage(msg.chat.id, "Admin " + match[1] + " ditambahkan.");
 });
 
 // ==========================
@@ -382,14 +375,14 @@ bot.onText(/\/addadmin (\d+)/, async (msg, match) => {
 // ==========================
 bot.onText(/\/removeadmin (\d+)/, async (msg, match) => {
   if (msg.chat.id !== OWNER_ID)
-    return bot.sendMessage(msg.chat.id, '❌ Hanya owner.');
+    return bot.sendMessage(msg.chat.id, "Hanya owner.");
 
   const id = parseInt(match[1]);
   if (id === OWNER_ID)
-    return bot.sendMessage(msg.chat.id, '❌ Owner tidak bisa dihapus.');
+    return bot.sendMessage(msg.chat.id, "Owner tidak bisa dihapus.");
 
   await pool.query("DELETE FROM admins_pap WHERE id=$1", [id]);
-  bot.sendMessage(msg.chat.id, `✅ Admin \`${id}\` dihapus.`, { parse_mode: 'Markdown' });
+  bot.sendMessage(msg.chat.id, "Admin " + id + " dihapus.");
 });
 
 // ==========================
@@ -397,12 +390,12 @@ bot.onText(/\/removeadmin (\d+)/, async (msg, match) => {
 // ==========================
 bot.onText(/\/listadmin/, async msg => {
   if (msg.chat.id !== OWNER_ID)
-    return bot.sendMessage(msg.chat.id, '❌ Hanya owner.');
+    return bot.sendMessage(msg.chat.id, "Hanya owner.");
 
   const res = await pool.query("SELECT id FROM admins_pap");
-  let text = '📋 *Daftar Admin*\n\n';
+  let text = "Daftar Admin\n\n";
   res.rows.forEach((r, i) => {
-    text += `${i + 1}. \`${r.id}\`${r.id == OWNER_ID ? ' (OWNER)' : ''}\n`;
+    text += `${i + 1}. ${r.id}${r.id == OWNER_ID ? ' (OWNER)' : ''}\n`;
   });
-  bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+  bot.sendMessage(msg.chat.id, text);
 });
