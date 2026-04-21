@@ -104,7 +104,8 @@ bot.onText(/\/start$/, async msg => {
   if (admin) {
     return bot.sendMessage(msg.chat.id,
       "Panel Admin - Bot Pap Cowok\n\n" +
-      "Upload foto/video lalu ketik judul, link langsung muncul.\n\n" +
+      "Upload foto/video lalu ketik judul, link langsung muncul.\n" +
+      "Atau forward foto/video yang sudah ada caption, langsung tersimpan otomatis.\n\n" +
       "Command:\n" +
       "/listmedia - lihat semua media\n" +
       "/hapus_(id) - hapus media\n" +
@@ -250,12 +251,12 @@ bot.on('callback_query', async query => {
 });
 
 // ==========================
-// HANDLER MESSAGE UTAMA (digabung jadi satu)
+// HANDLER MESSAGE UTAMA
 // ==========================
 bot.on('message', async msg => {
   const chatId = msg.chat.id;
 
-  // Abaikan semua command (sudah ditangani onText)
+  // Abaikan semua command
   if (msg.text && msg.text.startsWith('/')) return;
 
   const admin = await isAdmin(chatId);
@@ -263,23 +264,55 @@ bot.on('message', async msg => {
 
   // Admin upload FOTO
   if (msg.photo) {
-    pendingMedia[chatId] = {
-      file_id: msg.photo[msg.photo.length - 1].file_id,
-      media_type: 'photo'
-    };
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+
+    // Ada caption → langsung simpan
+    if (msg.caption) {
+      const judul = msg.caption;
+      const kode  = generateCode();
+
+      await pool.query(
+        "INSERT INTO media_papcowok (kode, file_id, media_type, judul) VALUES ($1,$2,$3,$4)",
+        [kode, fileId, 'photo', judul]
+      );
+
+      const link = `https://t.me/${botUsername}?start=${kode}`;
+      return bot.sendMessage(chatId,
+        `✅ Berhasil!\n\nJudul: ${judul}\nTipe: photo\nLink: ${link}`
+      );
+    }
+
+    // Tidak ada caption → minta judul
+    pendingMedia[chatId] = { file_id: fileId, media_type: 'photo' };
     return bot.sendMessage(chatId, "Ketik judul untuk foto ini:");
   }
 
   // Admin upload VIDEO
   if (msg.video) {
-    pendingMedia[chatId] = {
-      file_id: msg.video.file_id,
-      media_type: 'video'
-    };
+    const fileId = msg.video.file_id;
+
+    // Ada caption → langsung simpan
+    if (msg.caption) {
+      const judul = msg.caption;
+      const kode  = generateCode();
+
+      await pool.query(
+        "INSERT INTO media_papcowok (kode, file_id, media_type, judul) VALUES ($1,$2,$3,$4)",
+        [kode, fileId, 'video', judul]
+      );
+
+      const link = `https://t.me/${botUsername}?start=${kode}`;
+      return bot.sendMessage(chatId,
+        `✅ Berhasil!\n\nJudul: ${judul}\nTipe: video\nLink: ${link}`
+      );
+    }
+
+    // Tidak ada caption → minta judul
+    pendingMedia[chatId] = { file_id: fileId, media_type: 'video' };
     return bot.sendMessage(chatId, "Ketik judul untuk video ini:");
   }
 
-  // Terima judul dari admin
+  // Terima judul (untuk foto/video tanpa caption)
   if (msg.text && pendingMedia[chatId]) {
     const { file_id, media_type } = pendingMedia[chatId];
     const judul = msg.text;
@@ -293,7 +326,6 @@ bot.on('message', async msg => {
     );
 
     const link = `https://t.me/${botUsername}?start=${kode}`;
-
     return bot.sendMessage(chatId,
       `✅ Berhasil!\n\nJudul: ${judul}\nTipe: ${media_type}\nLink: ${link}`
     );
