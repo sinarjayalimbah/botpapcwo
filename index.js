@@ -7,7 +7,7 @@ const bot = new TelegramBot(token, { polling: true });
 // ==========================
 // KONFIGURASI
 // ==========================
-const OWNER_ID = 1388479642;          // Ganti dengan ID owner
+const OWNER_ID = 8492860397;          // Ganti dengan ID owner
 const botUsername = "ratepapcowoksdct_bot";  // Ganti dengan username bot (tanpa @)
 
 // ==========================
@@ -102,10 +102,10 @@ bot.onText(/\/start$/, async msg => {
   }
 
   bot.sendMessage(msg.chat.id,
-    `👋 Halo! Selamat datang di *Bot Review*.\n\n` +
-    `Kirimkan *foto* atau *video* review kamu.\n` +
-    `Boleh tambahkan caption sebagai keterangan.\n\n` +
-    `📌 Review kamu akan diproses oleh admin.`,
+    `👋 Halo! Selamat datang di *RATE PAP COWOK SEDUCTEASE*.\n\n` +
+    `Kirimkan *foto* atau *video* pap kamu.\n` +
+    `Boleh tambahkan caption sebagai keterangan. WAJIB MENAMBAHKAN STIKER YANG DISEDIAKAN, JIKA TERLIHAT WAJAH HARAP TUTUP DENGAN STIKER SEDUCTEASE\n\n` +
+    `📌 Pap kamu akan diproses oleh admin.`,
     { parse_mode: "Markdown" }
   );
 });
