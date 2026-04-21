@@ -71,14 +71,33 @@ async function checkMembership(userId) {
 
 // 🔥 BUTTON JOIN
 function getJoinKeyboard() {
-  const buttons = CHANNELS.map(ch => ([
-    { text: `Join ${ch}`, url: `https://t.me/${ch.replace('@', '')}` }
-  ]));
+  const buttons = [];
+  let row = [];
 
+  CHANNELS.forEach((ch, i) => {
+    row.push({
+      text: "Join Channel", // biar ga semua "Join Channel"
+      url: `https://t.me/${ch.replace('@', '')}`
+    });
+
+    // tiap 2 tombol → masuk baris
+    if (row.length === 2) {
+      buttons.push(row);
+      row = [];
+    }
+  });
+
+  // kalau sisa 1
+  if (row.length > 0) {
+    buttons.push(row);
+  }
+
+  // grup (1 baris sendiri)
   buttons.push([
     { text: "Join Grup", url: GROUP_INVITE_LINK }
   ]);
 
+  // tombol cek
   buttons.push([
     { text: "✅ Saya sudah join", callback_data: "cek_join" }
   ]);
